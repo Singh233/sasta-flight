@@ -72,3 +72,60 @@ async def test_save_and_get_price_history(db):
     history = await db.get_price_history(route_id, days=7)
     assert len(history) == 1
     assert history[0]["cheapest_price"] == 3200.0
+
+
+@pytest.mark.asyncio
+async def test_init_creates_stops_preference(db):
+    config = await db.get_config("stops_preference")
+    assert config == "any"
+
+
+@pytest.mark.asyncio
+async def test_add_route_default_max_stops(db):
+    route_id = await db.add_route("ATQ", "BOM")
+    routes = await db.get_active_routes()
+    assert routes[0]["max_stops"] is None
+
+
+@pytest.mark.asyncio
+async def test_add_route_with_max_stops(db):
+    route_id = await db.add_route("ATQ", "BOM", max_stops="direct")
+    routes = await db.get_active_routes()
+    assert routes[0]["max_stops"] == "direct"
+
+
+@pytest.mark.asyncio
+async def test_set_route_stops(db):
+    route_id = await db.add_route("ATQ", "BOM")
+    updated = await db.set_route_stops(route_id, "1stop")
+    assert updated is True
+    routes = await db.get_active_routes()
+    assert routes[0]["max_stops"] == "1stop"
+
+
+@pytest.mark.asyncio
+async def test_set_route_stops_nonexistent(db):
+    updated = await db.set_route_stops(999, "direct")
+    assert updated is False
+
+
+@pytest.mark.asyncio
+async def test_get_route_stops_preference_per_route(db):
+    route_id = await db.add_route("ATQ", "BOM", max_stops="direct")
+    pref = await db.get_route_stops_preference(route_id)
+    assert pref == "direct"
+
+
+@pytest.mark.asyncio
+async def test_get_route_stops_preference_falls_back_to_global(db):
+    route_id = await db.add_route("ATQ", "BOM")
+    pref = await db.get_route_stops_preference(route_id)
+    assert pref == "any"
+
+
+@pytest.mark.asyncio
+async def test_get_route_stops_preference_custom_global(db):
+    route_id = await db.add_route("ATQ", "BOM")
+    await db.set_config("stops_preference", "1stop")
+    pref = await db.get_route_stops_preference(route_id)
+    assert pref == "1stop"
