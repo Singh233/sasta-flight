@@ -19,35 +19,41 @@ Daily flight price scanner Telegram bot. Scans Google Flights for the cheapest d
 
 ### 3. Deploy
 
-#### Option A: Railway (Recommended)
+#### Option A: Railway
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/template)
-
-1. Fork this repo
-2. Go to [railway.com](https://railway.com) → New Project → Deploy from GitHub repo
-3. Select your forked repo
-4. Add environment variables:
+1. Go to [railway.com](https://railway.com) and sign up / log in
+2. Click **New Project** → **GitHub Repository**
+3. Connect your GitHub and select `sasta-flight`
+4. Go to **Variables** tab and add:
    - `TELEGRAM_BOT_TOKEN` = your bot token
    - `TELEGRAM_CHAT_ID` = your chat ID
 5. Railway will build and deploy automatically
-6. Add a volume mounted at `/app/data` for persistent database storage
+6. (Optional) Add a volume mounted at `/app/data` for persistent database storage
 
-That's it. Your bot is running.
+#### Option B: DigitalOcean App Platform
 
-#### Option B: Docker Compose (Any VPS)
+1. Go to [cloud.digitalocean.com/apps](https://cloud.digitalocean.com/apps) and sign up / log in
+2. Click **Create App** → **GitHub** → select `sasta-flight`
+3. Choose **Worker** (not web service, since this is a bot)
+4. Set environment variables:
+   - `TELEGRAM_BOT_TOKEN` = your bot token
+   - `TELEGRAM_CHAT_ID` = your chat ID
+5. Pick the cheapest plan ($5/mo) and deploy
+
+#### Option C: Docker Compose (Any VPS)
 
 ```bash
-git clone https://github.com/yourusername/sasta-flight.git
+git clone https://github.com/Pankaj3112/sasta-flight.git
 cd sasta-flight
 cp .env.example .env
 # Edit .env with your bot token and chat ID
 docker compose up -d
 ```
 
-#### Option C: Run Locally
+#### Option D: Run Locally
 
 ```bash
-git clone https://github.com/yourusername/sasta-flight.git
+git clone https://github.com/Pankaj3112/sasta-flight.git
 cd sasta-flight
 python -m venv .venv
 source .venv/bin/activate
