@@ -81,9 +81,11 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     route_id = await db.add_route(from_code, to_code)
+    keyboard = _stops_keyboard(f"stops_newroute:{route_id}")
     await update.message.reply_text(
         f"✅ Route added: {from_code} → {to_code} (ID: {route_id})\n"
-        "Use /check to run a scan now."
+        "Select stops preference for this route:",
+        reply_markup=keyboard,
     )
 
 
