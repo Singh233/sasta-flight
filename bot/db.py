@@ -1,9 +1,11 @@
 import aiosqlite
 import os
 
+from bot.config import DB_PATH
+
 
 class Database:
-    def __init__(self, db_path: str):
+    def __init__(self, db_path: str = DB_PATH):
         self.db_path = db_path
         self.db: aiosqlite.Connection | None = None
 
