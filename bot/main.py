@@ -2,7 +2,7 @@ import logging
 from datetime import time as dt_time
 from zoneinfo import ZoneInfo
 
-from telegram.ext import Application, CommandHandler
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler
 
 from bot.config import BOT_TOKEN, TIMEZONE
 from bot.db import Database
@@ -70,6 +70,8 @@ def main():
     application.add_handler(CommandHandler("history", handlers.history_command))
     application.add_handler(CommandHandler("pause", handlers.pause_command))
     application.add_handler(CommandHandler("resume", handlers.resume_command))
+    application.add_handler(CommandHandler("stops", handlers.stops_command))
+    application.add_handler(CallbackQueryHandler(handlers.stops_callback, pattern=r"^stops_"))
 
     application.run_polling()
 

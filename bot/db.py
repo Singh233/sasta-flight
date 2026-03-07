@@ -24,6 +24,7 @@ class Database:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 from_airport TEXT NOT NULL,
                 to_airport TEXT NOT NULL,
+                max_stops TEXT DEFAULT NULL,
                 is_active INTEGER DEFAULT 1,
                 created_at TEXT DEFAULT (datetime('now'))
             );
@@ -43,9 +44,17 @@ class Database:
 
             INSERT OR IGNORE INTO config (key, value) VALUES ('notify_time', '08:00');
             INSERT OR IGNORE INTO config (key, value) VALUES ('is_paused', '0');
+            INSERT OR IGNORE INTO config (key, value) VALUES ('stops_preference', 'any');
             """
         )
         await self.db.commit()
+
+        # Migrate: add max_stops column if missing
+        try:
+            await self.db.execute("ALTER TABLE routes ADD COLUMN max_stops TEXT DEFAULT NULL")
+            await self.db.commit()
+        except Exception:
+            pass  # Column already exists
 
     async def close(self):
         if self.db:
@@ -65,17 +74,17 @@ class Database:
         )
         await self.db.commit()
 
-    async def add_route(self, from_airport: str, to_airport: str) -> int:
+    async def add_route(self, from_airport: str, to_airport: str, max_stops: str | None = None) -> int:
         cursor = await self.db.execute(
-            "INSERT INTO routes (from_airport, to_airport) VALUES (?, ?)",
-            (from_airport.upper(), to_airport.upper()),
+            "INSERT INTO routes (from_airport, to_airport, max_stops) VALUES (?, ?, ?)",
+            (from_airport.upper(), to_airport.upper(), max_stops),
         )
         await self.db.commit()
         return cursor.lastrowid
 
     async def get_active_routes(self) -> list[dict]:
         cursor = await self.db.execute(
-            "SELECT id, from_airport, to_airport FROM routes WHERE is_active = 1"
+            "SELECT id, from_airport, to_airport, max_stops FROM routes WHERE is_active = 1"
         )
         rows = await cursor.fetchall()
         return [dict(row) for row in rows]
@@ -87,6 +96,23 @@ class Database:
         )
         await self.db.commit()
         return cursor.rowcount > 0
+
+    async def set_route_stops(self, route_id: int, max_stops: str) -> bool:
+        cursor = await self.db.execute(
+            "UPDATE routes SET max_stops = ? WHERE id = ? AND is_active = 1",
+            (max_stops, route_id),
+        )
+        await self.db.commit()
+        return cursor.rowcount > 0
+
+    async def get_route_stops_preference(self, route_id: int) -> str:
+        cursor = await self.db.execute(
+            "SELECT max_stops FROM routes WHERE id = ?", (route_id,)
+        )
+        row = await cursor.fetchone()
+        if row and row["max_stops"]:
+            return row["max_stops"]
+        return await self.get_config("stops_preference") or "any"
 
     async def save_price_history(
         self,

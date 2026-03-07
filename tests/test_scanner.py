@@ -81,5 +81,60 @@ async def test_scan_route_full(mock_date_results, mock_flight_results):
     assert len(result.top_days) == 5
 
 
+from fli.models import MaxStops
+
+
+@pytest.mark.asyncio
+async def test_scan_flight_details_with_max_stops(mock_flight_results):
+    with patch("bot.scanner.SearchFlights") as MockSearch:
+        MockSearch.return_value.search.return_value = mock_flight_results
+        result = await scan_flight_details("ATQ", "BOM", "2026-04-02", max_stops="direct")
+
+    # Verify MaxStops was passed to filters
+    call_args = MockSearch.return_value.search.call_args[0][0]
+    assert call_args.stops == MaxStops.NON_STOP
+
+
+@pytest.mark.asyncio
+async def test_scan_flight_details_default_max_stops(mock_flight_results):
+    with patch("bot.scanner.SearchFlights") as MockSearch:
+        MockSearch.return_value.search.return_value = mock_flight_results
+        result = await scan_flight_details("ATQ", "BOM", "2026-04-02")
+
+    call_args = MockSearch.return_value.search.call_args[0][0]
+    assert call_args.stops == MaxStops.ANY
+
+
+@pytest.mark.asyncio
+async def test_scan_route_skips_dates_without_matching_flights(mock_date_results):
+    """When stops filter causes some dates to have no flights, skip them."""
+    with patch("bot.scanner.SearchDates") as MockDates, \
+         patch("bot.scanner.SearchFlights") as MockFlights:
+        MockDates.return_value.search.return_value = mock_date_results
+        # First 2 dates return no flights, 3rd returns a flight
+        leg = MagicMock()
+        leg.airline.value = "IndiGo"
+        leg.departure_datetime = datetime(2026, 4, 5, 6, 0)
+        valid_flight = MagicMock()
+        valid_flight.price = 4500
+        valid_flight.duration = 165
+        valid_flight.stops = 0
+        valid_flight.legs = [leg]
+        MockFlights.return_value.search.side_effect = [
+            [],  # date 1: no matching flights
+            [],  # date 2: no matching flights
+            [valid_flight],  # date 3: match
+            [valid_flight],  # date 4: match
+            [valid_flight],  # date 5: match
+            [valid_flight],  # date 6: match
+            [valid_flight],  # date 7: match
+        ]
+
+        result = await scan_route("ATQ", "BOM", max_stops="direct")
+
+    assert result is not None
+    assert len(result.top_days) == 5  # still gets 5 valid days
+
+
 # Import scan_route here to avoid import issues at top
 from bot.scanner import scan_route

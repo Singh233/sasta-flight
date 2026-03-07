@@ -22,9 +22,12 @@ def _format_stops(stops: int) -> str:
     return f"{stops} stop{'s' if stops > 1 else ''}"
 
 
-def format_daily_message(result: ScanResult, prev_cheapest: float | None = None) -> str:
+def format_daily_message(result: ScanResult, prev_cheapest: float | None = None, stops_label: str | None = None) -> str:
+    header = f"✈️ {result.from_airport} → {result.to_airport} | Next 30 Days"
+    if stops_label:
+        header += f" | Filter: {stops_label}"
     lines = [
-        f"✈️ {result.from_airport} → {result.to_airport} | Next 30 Days",
+        header,
         "━━━━━━━━━━━━━━━━━━━━━━",
         "",
     ]
