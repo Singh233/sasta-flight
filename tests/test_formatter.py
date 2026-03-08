@@ -1,6 +1,29 @@
 import pytest
-from bot.formatter import format_daily_message, format_history_message
+from bot.formatter import format_daily_message, format_history_message, _flight_url
 from bot.scanner import ScanResult
+
+
+def test_flight_url_contains_base_url():
+    url = _flight_url("ATQ", "BOM", "2026-03-18")
+    assert url.startswith("https://www.google.com/travel/flights/search?tfs=")
+
+
+def test_flight_url_differs_by_date():
+    url1 = _flight_url("ATQ", "BOM", "2026-03-18")
+    url2 = _flight_url("ATQ", "BOM", "2026-03-20")
+    assert url1 != url2
+
+
+def test_flight_url_differs_by_stops():
+    url_any = _flight_url("ATQ", "BOM", "2026-03-18")
+    url_direct = _flight_url("ATQ", "BOM", "2026-03-18", max_stops="direct")
+    assert url_any != url_direct
+
+
+def test_flight_url_no_stops_same_as_any():
+    url_none = _flight_url("ATQ", "BOM", "2026-03-18")
+    url_any = _flight_url("ATQ", "BOM", "2026-03-18", max_stops="any")
+    assert url_none == url_any
 
 
 def test_format_daily_message_basic():
