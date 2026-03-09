@@ -332,8 +332,8 @@ async def _scan_and_send(context: ContextTypes.DEFAULT_TYPE, route: dict, is_ret
     )
 
     stops_label = STOPS_LABELS.get(max_stops) if max_stops != "any" else None
-    msg = format_daily_message(result, prev_cheapest=prev_cheapest, stops_label=stops_label)
-    await context.bot.send_message(chat_id=CHAT_ID, text=msg)
+    msg = format_daily_message(result, prev_cheapest=prev_cheapest, stops_label=stops_label, max_stops=max_stops)
+    await context.bot.send_message(chat_id=CHAT_ID, text=msg, parse_mode="Markdown")
 
 
 async def _retry_scan_job(context: ContextTypes.DEFAULT_TYPE):

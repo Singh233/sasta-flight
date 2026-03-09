@@ -1,3 +1,4 @@
+import base64
 from datetime import datetime
 from bot.scanner import ScanResult
 
@@ -22,7 +23,71 @@ def _format_stops(stops: int) -> str:
     return f"{stops} stop{'s' if stops > 1 else ''}"
 
 
-def format_daily_message(result: ScanResult, prev_cheapest: float | None = None, stops_label: str | None = None) -> str:
+# Google Flights protobuf field encoding helpers
+def _pb_varint(value: int) -> bytes:
+    """Encode an integer as a protobuf varint."""
+    result = bytearray()
+    while value > 0x7F:
+        result.append((value & 0x7F) | 0x80)
+        value >>= 7
+    result.append(value & 0x7F)
+    return bytes(result)
+
+
+def _pb_tag(field_number: int, wire_type: int) -> bytes:
+    """Encode a protobuf field tag."""
+    return _pb_varint((field_number << 3) | wire_type)
+
+
+def _pb_string(field_number: int, value: str) -> bytes:
+    """Encode a string field."""
+    encoded = value.encode("utf-8")
+    return _pb_tag(field_number, 2) + _pb_varint(len(encoded)) + encoded
+
+
+def _pb_message(field_number: int, data: bytes) -> bytes:
+    """Encode a nested message field."""
+    return _pb_tag(field_number, 2) + _pb_varint(len(data)) + data
+
+
+def _pb_enum(field_number: int, value: int) -> bytes:
+    """Encode an enum/int32 field."""
+    return _pb_tag(field_number, 0) + _pb_varint(value)
+
+
+# Mapping from bot stops preference to Google Flights protobuf max_stops values
+_URL_STOPS_MAP = {
+    "direct": 1,   # Nonstop only
+    "1stop": 2,    # 1 stop or fewer
+    "2stops": 3,   # 2 stops or fewer
+}
+
+
+def _flight_url(from_airport: str, to_airport: str, date: str, max_stops: str = "any") -> str:
+    """Build a Google Flights search URL for a one-way flight."""
+    # Airport messages: message Airport { string airport = 2; }
+    from_ap = _pb_string(2, from_airport)
+    to_ap = _pb_string(2, to_airport)
+
+    # FlightData: date=2, max_stops=5, from_flight=13, to_flight=14
+    flight_data = _pb_string(2, date)
+    stops_val = _URL_STOPS_MAP.get(max_stops)
+    if stops_val is not None:
+        flight_data += _pb_enum(5, stops_val)
+    flight_data += _pb_message(13, from_ap)
+    flight_data += _pb_message(14, to_ap)
+
+    # Info: data=3, passengers=8, seat=9, trip=19
+    info = _pb_message(3, flight_data)
+    info += _pb_enum(8, 1)   # ADULT
+    info += _pb_enum(9, 1)   # ECONOMY
+    info += _pb_enum(19, 2)  # ONE_WAY
+
+    tfs = base64.urlsafe_b64encode(info).decode("ascii").rstrip("=")
+    return f"https://www.google.com/travel/flights/search?tfs={tfs}"
+
+
+def format_daily_message(result: ScanResult, prev_cheapest: float | None = None, stops_label: str | None = None, max_stops: str = "any") -> str:
     header = f"✈️ {result.from_airport} → {result.to_airport} | Next 30 Days"
     if stops_label:
         header += f" | Filter: {stops_label}"
@@ -51,7 +116,8 @@ def format_daily_message(result: ScanResult, prev_cheapest: float | None = None,
     # Top cheapest days
     lines.append(f"📊 Top {len(result.top_days)} Cheapest Days:")
     for i, day in enumerate(result.top_days, 1):
-        lines.append(f" {i}. {_format_date(day['date'])} - {_format_price(day['price'])}")
+        url = _flight_url(result.from_airport, result.to_airport, day["date"], max_stops=max_stops)
+        lines.append(f" {i}. {_format_date(day['date'])} - {_format_price(day['price'])}  [Book →]({url})")
 
     lines.append("")
 
