@@ -131,16 +131,25 @@ async def routes_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     global_pref = await db.get_config("stops_preference") or "any"
+    global_interval = await db.get_config("scan_interval") or "1440"
     lines = ["📋 Active Routes:\n"]
     keyboard_rows = []
     for r in routes:
-        effective = r["max_stops"] or global_pref
-        label = STOPS_LABELS.get(effective, effective)
-        lines.append(f"  {r['id']}. {r['from_airport']} → {r['to_airport']} ({label})")
+        effective_stops = r["max_stops"] or global_pref
+        stops_label = STOPS_LABELS.get(effective_stops, effective_stops)
+        effective_interval = r["scan_interval"] or global_interval
+        freq_label = INTERVAL_LABELS.get(effective_interval, f"{effective_interval}m")
+        lines.append(f"  {r['id']}. {r['from_airport']} → {r['to_airport']} | {stops_label} | Every {freq_label}")
         keyboard_rows.append([
             InlineKeyboardButton(
                 f"Change Stops: {r['from_airport']} → {r['to_airport']}",
                 callback_data=f"stops_pick:{r['id']}",
+            )
+        ])
+        keyboard_rows.append([
+            InlineKeyboardButton(
+                f"Change Frequency: {r['from_airport']} → {r['to_airport']}",
+                callback_data=f"freq_pick:{r['id']}",
             )
         ])
 
