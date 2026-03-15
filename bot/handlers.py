@@ -56,7 +56,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not _is_authorized(update):
         return
     await update.message.reply_text(
-        "✈️ SastaFlight - Daily Flight Price Scanner\n\n"
+        "✈️ SastaFlight - Flight Price Scanner\n\n"
         "Commands:\n"
         "/add <from> <to> - Add a route (e.g. /add ATQ BOM)\n"
         "/remove <id> - Remove a route\n"
@@ -64,10 +64,10 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/stops - Set default stops preference\n"
         "/frequency - Set scan frequency\n"
         "/check - Scan all routes now\n"
-        "/time <HH:MM> - Set daily scan time (24h, IST)\n"
+        "/time <HH:MM> - Set scan start time (24h, IST)\n"
         "/history - 7-day price trend\n"
-        "/pause - Pause daily updates\n"
-        "/resume - Resume daily updates\n"
+        "/pause - Pause scheduled scans\n"
+        "/resume - Resume scheduled scans\n"
         "/help - Show this message"
     )
 
