@@ -1,5 +1,5 @@
 import logging
-from datetime import time as dt_time
+from datetime import datetime, time as dt_time, timedelta
 from zoneinfo import ZoneInfo
 
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler
@@ -14,26 +14,49 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-DAILY_JOB_NAME = "daily_scan"
+SCAN_JOB_PREFIX = "scan_route_"
 
 
-async def schedule_daily_job(application: Application):
-    """Schedule or reschedule the daily scan job."""
-    # Remove existing daily job
-    existing = application.job_queue.get_jobs_by_name(DAILY_JOB_NAME)
-    for job in existing:
-        job.schedule_removal()
+async def schedule_scan_jobs(application: Application):
+    """Schedule or reschedule per-route scan jobs."""
+    # Remove all existing scan jobs (.jobs() available in python-telegram-bot>=21.0)
+    for job in application.job_queue.jobs():
+        if job.name and job.name.startswith(SCAN_JOB_PREFIX):
+            job.schedule_removal()
 
     notify_time = await handlers.db.get_config("notify_time")
     hour, minute = map(int, notify_time.split(":"))
     tz = ZoneInfo(TIMEZONE)
 
-    application.job_queue.run_daily(
-        handlers.daily_scan_job,
-        time=dt_time(hour=hour, minute=minute, tzinfo=tz),
-        name=DAILY_JOB_NAME,
+    routes = await handlers.db.get_active_routes()
+    for route in routes:
+        interval_minutes = await handlers.db.get_route_scan_interval(route["id"])
+        interval_secs = interval_minutes * 60
+
+        now = datetime.now(tz)
+        today_notify = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+        if now < today_notify:
+            first = today_notify - now
+        else:
+            elapsed = (now - today_notify).total_seconds()
+            slots_passed = int(elapsed // interval_secs)
+            next_slot = today_notify + timedelta(seconds=(slots_passed + 1) * interval_secs)
+            first = next_slot - now
+            if first.total_seconds() > interval_secs:
+                first = timedelta(seconds=0)
+
+        application.job_queue.run_repeating(
+            handlers._scheduled_scan_route,
+            interval=interval_secs,
+            first=first,
+            data=route,
+            name=f"{SCAN_JOB_PREFIX}{route['id']}",
+        )
+
+    logger.info(
+        f"Scheduled {len(routes)} route scan jobs (notify_time={notify_time} {TIMEZONE})"
     )
-    logger.info(f"Daily scan scheduled at {notify_time} {TIMEZONE}")
 
 
 async def post_init(application: Application):
@@ -41,7 +64,7 @@ async def post_init(application: Application):
     db = Database()
     await db.init()
     handlers.db = db
-    await schedule_daily_job(application)
+    await schedule_scan_jobs(application)
     logger.info("SastaFlight bot started")
 
 

@@ -79,6 +79,9 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     route_id = await db.add_route(from_code, to_code)
+    # Schedule a scan job for the new route
+    from bot.main import schedule_scan_jobs
+    await schedule_scan_jobs(context.application)
     keyboard = _stops_keyboard(f"stops_newroute:{route_id}")
     await update.message.reply_text(
         f"✅ Route added: {from_code} → {to_code} (ID: {route_id})\n"
@@ -167,8 +170,8 @@ async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await db.set_config("notify_time", time_str)
 
     # Reschedule - import here to avoid circular
-    from bot.main import schedule_daily_job
-    await schedule_daily_job(context.application)
+    from bot.main import schedule_scan_jobs
+    await schedule_scan_jobs(context.application)
 
     await update.message.reply_text(f"✅ Daily scan time set to {time_str} IST")
 
@@ -304,15 +307,24 @@ async def _scan_and_send(context: ContextTypes.DEFAULT_TYPE, route: dict, is_ret
             )
             await context.bot.send_message(chat_id=CHAT_ID, text=msg)
         else:
-            msg = format_error_message(from_code, to_code)
-            await context.bot.send_message(chat_id=CHAT_ID, text=msg)
-            # Schedule retry in 4 hours
-            context.job_queue.run_once(
-                _retry_scan_job,
-                when=4 * 60 * 60,
-                data=route,
-                name=f"retry_{route['id']}",
-            )
+            # Schedule retry only if interval > 4 hours
+            interval = await db.get_route_scan_interval(route["id"])
+            if interval > 240:
+                msg = format_error_message(from_code, to_code)
+                await context.bot.send_message(chat_id=CHAT_ID, text=msg)
+                context.job_queue.run_once(
+                    _retry_scan_job,
+                    when=4 * 60 * 60,
+                    data=route,
+                    name=f"retry_{route['id']}",
+                )
+            else:
+                msg = (
+                    f"⚠️ {from_code} → {to_code}\n"
+                    "Scan failed. Will retry on next scheduled scan.\n"
+                    "Run /check to try manually."
+                )
+                await context.bot.send_message(chat_id=CHAT_ID, text=msg)
         return
 
     # Get previous cheapest for trend
@@ -342,15 +354,21 @@ async def _retry_scan_job(context: ContextTypes.DEFAULT_TYPE):
     await _scan_and_send(context, route, is_retry=True)
 
 
-async def daily_scan_job(context: ContextTypes.DEFAULT_TYPE):
-    """Daily scheduled job: scan all routes if not paused."""
+async def _scheduled_scan_route(context: ContextTypes.DEFAULT_TYPE):
+    """Repeating job callback for a single route."""
     is_paused = await db.get_config("is_paused")
     if is_paused == "1":
         return
 
-    routes = await db.get_active_routes()
-    if not routes:
+    route = context.job.data
+    if not route:
         return
 
-    for route in routes:
+    scanning = context.bot_data.setdefault("_scanning_routes", set())
+    if route["id"] in scanning:
+        return
+    scanning.add(route["id"])
+    try:
         await _scan_and_send(context, route)
+    finally:
+        scanning.discard(route["id"])
