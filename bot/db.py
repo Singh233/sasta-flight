@@ -42,6 +42,9 @@ class Database:
                 FOREIGN KEY (route_id) REFERENCES routes(id)
             );
 
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_price_history_route_date
+            ON price_history(route_id, scan_date);
+
             INSERT OR IGNORE INTO config (key, value) VALUES ('notify_time', '08:00');
             INSERT OR IGNORE INTO config (key, value) VALUES ('is_paused', '0');
             INSERT OR IGNORE INTO config (key, value) VALUES ('stops_preference', 'any');
@@ -155,7 +158,7 @@ class Database:
         price_data: str | None,
     ):
         await self.db.execute(
-            """INSERT INTO price_history
+            """INSERT OR REPLACE INTO price_history
             (route_id, scan_date, cheapest_travel_date, cheapest_price, cheapest_airline, avg_price, price_data)
             VALUES (?, ?, ?, ?, ?, ?, ?)""",
             (route_id, scan_date, cheapest_travel_date, cheapest_price, cheapest_airline, avg_price, price_data),
