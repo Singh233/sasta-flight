@@ -196,6 +196,6 @@ def format_error_message(from_airport: str, to_airport: str) -> str:
 def format_retry_failed_message(from_airport: str, to_airport: str) -> str:
     return (
         f"❌ {from_airport} → {to_airport}\n"
-        "Scan failed after retry. Will try again tomorrow.\n"
+        "Scan failed after retry. Will try again on next scheduled scan.\n"
         "Run /check to try manually."
     )

@@ -12,6 +12,7 @@ from bot.formatter import (
     format_daily_message,
     format_error_message,
     format_history_message,
+    format_retry_failed_message,
 )
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/remove <id> - Remove a route\n"
         "/routes - List active routes\n"
         "/stops - Set default stops preference\n"
+        "/frequency - Set scan frequency\n"
         "/check - Scan all routes now\n"
         "/time <HH:MM> - Set daily scan time (24h, IST)\n"
         "/history - 7-day price trend\n"
@@ -117,6 +119,10 @@ async def remove_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     removed = await db.remove_route(route_id)
     if removed:
+        # Cancel the scheduled scan job for this route
+        from bot.main import SCAN_JOB_PREFIX
+        for job in context.job_queue.get_jobs_by_name(f"{SCAN_JOB_PREFIX}{route_id}"):
+            job.schedule_removal()
         await update.message.reply_text(f"✅ Route {route_id} removed.")
     else:
         await update.message.reply_text(f"❌ Route {route_id} not found.")
@@ -177,7 +183,7 @@ async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args or len(context.args) != 1:
         current = await db.get_config("notify_time")
         await update.message.reply_text(
-            f"Current scan time: {current} IST\nUsage: /time <HH:MM>"
+            f"Current scan start time: {current} IST\nUsage: /time <HH:MM>"
         )
         return
 
@@ -194,7 +200,7 @@ async def time_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from bot.main import schedule_scan_jobs
     await schedule_scan_jobs(context.application)
 
-    await update.message.reply_text(f"✅ Daily scan time set to {time_str} IST")
+    await update.message.reply_text(f"✅ Scan start time set to {time_str} IST")
 
 
 async def history_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -394,11 +400,7 @@ async def _scan_and_send(context: ContextTypes.DEFAULT_TYPE, route: dict, is_ret
 
     if result is None:
         if is_retry:
-            msg = (
-                f"❌ {from_code} → {to_code}\n"
-                "Scan failed after retry. Will try again tomorrow.\n"
-                "Run /check to try manually."
-            )
+            msg = format_retry_failed_message(from_code, to_code)
             await context.bot.send_message(chat_id=CHAT_ID, text=msg)
         else:
             # Schedule retry only if interval > 4 hours
